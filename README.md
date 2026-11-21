@@ -22,20 +22,46 @@ Both Windows Copilot and the Windows Start Menu are suppressed when you press th
 
 ---
 
-## Quick Start (Build & Install)
+## Quick Start (Download & Install)
 
-1. Clone or download this repository into any permanent folder where you want the utility to stay (the Windows Startup shortcut will point to the compiled executable in that folder).
-2. Double-click **`Build-And-Install.bat`**, or run the PowerShell script from the repository folder:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\Build-And-Install.ps1
-   ```
+### Option 1: Double-Click `install.bat` (Easiest — no terminal, no Git required)
+1. Download [`install.bat`](https://raw.githubusercontent.com/Blecc/AntigravityCopilotKeyShortcut/main/install.bat) (right-click → *Save link as...*).
+2. Double-click **`install.bat`**.
 
-The setup script will:
-- Detect your Antigravity installation and the .NET Framework C# compiler (`csc.exe`)
-- Stop any running instance of the helper
-- Compile `CopilotToAntigravity.exe`
-- Add a shortcut (`CopilotToAntigravity.lnk`) to your Windows Startup folder (`shell:startup`)
-- Launch the utility in the system tray
+It automatically downloads the latest version into `%LOCALAPPDATA%\AntigravityCopilotKeyShortcut`, compiles `CopilotToAntigravity.exe`, adds it to Windows Startup, and launches it.
+
+### Option 2: One-Line PowerShell Install (No download needed)
+Open PowerShell and run:
+```powershell
+irm https://raw.githubusercontent.com/Blecc/AntigravityCopilotKeyShortcut/main/install.ps1 | iex
+```
+
+> **Custom install folder:**
+> ```powershell
+> $env:ANTIGRAVITY_COPILOT_INSTALL_DIR = "C:\Utility\Programmi\AntigravityCopilotKeyShortcut"
+> irm https://raw.githubusercontent.com/Blecc/AntigravityCopilotKeyShortcut/main/install.ps1 | iex
+> ```
+
+### Option 3: Clone with Git
+```powershell
+git clone https://github.com/Blecc/AntigravityCopilotKeyShortcut.git
+cd AntigravityCopilotKeyShortcut
+.\Build-And-Install.bat
+```
+
+### Option 4: Direct ZIP / GitHub Releases
+1. Download the [latest source ZIP](https://github.com/Blecc/AntigravityCopilotKeyShortcut/archive/refs/heads/main.zip) (or a pre-built release from [GitHub Releases](https://github.com/Blecc/AntigravityCopilotKeyShortcut/releases/latest)) and extract it to any permanent folder.
+2. Double-click **`Build-And-Install.bat`** (or run `CopilotToAntigravity.exe` directly if using a pre-built release).
+
+### What `Build-And-Install` Does
+- Detects your Antigravity installation and the .NET Framework C# compiler (`csc.exe`) — prompting to install .NET Framework 4.8 Developer Pack if missing
+- Stops any running instance of the helper
+- Compiles `CopilotToAntigravity.exe`
+- Adds a shortcut (`CopilotToAntigravity.lnk`) to your Windows Startup folder (`shell:startup`)
+- Launches the utility in the system tray
+
+### Updating Later
+Re-run the one-line installer above (your `config.ini` settings are preserved), or run `git pull` followed by `.\Build-And-Install.bat`.
 
 ### Optional Setup Flags
 
@@ -53,9 +79,12 @@ powershell -ExecutionPolicy Bypass -File .\Build-And-Install.ps1 -NoLaunch
 
 | File | Purpose |
 | :--- | :--- |
-| `CopilotToAntigravity.cs` | C# source code for the keyboard hook, tray icon, toggle logic, and Antigravity path auto-detection |
+| `install.bat` | Standalone double-click installer (can be downloaded by itself; runs local `install.ps1` or fetches it from GitHub) |
+| `install.ps1` | One-line remote installer: downloads the repo via Git (or ZIP fallback), preserves `config.ini`, and runs `Build-And-Install.ps1` |
+| `CopilotToAntigravity.cs` | C# source code for the keyboard hook, tray icon, toggle/hide/close logic, and Antigravity path auto-detection |
 | `Build-And-Install.ps1` | PowerShell setup script: checks Antigravity & C# compiler state (prompts to install compiler if missing), builds `CopilotToAntigravity.exe`, updates the Startup shortcut, and launches it |
 | `Build-And-Install.bat` | Double-click launcher for `Build-And-Install.ps1` (bypasses PowerShell execution policy) |
+| `.github/workflows/release.yml` | GitHub Actions workflow that compiles `CopilotToAntigravity.exe` and attaches a ready-to-run release ZIP when pushing a `v*` tag |
 | `README.md` | Project documentation |
 
 ### Generated / System Files

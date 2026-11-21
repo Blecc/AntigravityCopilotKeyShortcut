@@ -1,1 +1,4 @@
 *.exe
+*.TMP
+*.tmp
+config.ini
