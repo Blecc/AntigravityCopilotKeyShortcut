@@ -1,14 +1,14 @@
 # Antigravity Copilot Key Shortcut
 
-A lightweight, zero-dependency Windows 11 system tray utility written in C# (.NET Framework 4.x) that remaps the physical **Copilot key** on your keyboard into a dedicated toggle button for **Antigravity**.
+A lightweight, zero-dependency Windows 11 system tray utility written in C# (.NET Framework 4.x) that remaps the physical **Copilot key** on your keyboard into a dedicated toggle button for **Antigravity** (**GUI** `Antigravity.exe`, **CLI** `agy.exe`, or a quick **Ask Every Time** popup).
 
-| Current State of Antigravity | Action When Pressing the Copilot Key |
+| Current State of Target (GUI or CLI) | Action When Pressing the Copilot Key |
 | :--- | :--- |
-| **Not running** | Auto-detects and launches `Antigravity.exe` |
-| **Running in background, minimized, or hidden to tray** | Restores/unhides and brings Antigravity to the foreground (preserving maximized/normal state) |
-| **Already open and focused** | **Minimize to Tray (default):** Hides Antigravity completely from the taskbar so it stays alive behind the hidden system tray icon<br>**Close App (optional):** Cleanly closes the Antigravity window (`WM_CLOSE`) |
+| **Not running** | Auto-detects and launches `Antigravity.exe` (GUI) or `agy.exe` (CLI) |
+| **Running in background, minimized, or hidden to tray** | Restores/unhides and brings the target window to the foreground (preserving maximized/normal state) |
+| **Already open and focused** | **Minimize to Tray (default):** Hides the window completely from the taskbar so it stays alive behind the hidden system tray icon<br>**Close App (optional):** Cleanly closes the window (`WM_CLOSE`) |
 
-Switch between **Minimize to Tray (Hide)** and **Close App** anytime from the system tray right-click menu; your choice is saved automatically in `config.ini`.
+Switch between **Target: Antigravity GUI**, **Target: Antigravity CLI (agy)**, and **Target: Ask Every Time (Popup)** — as well as **Minimize to Tray (Hide)** and **Close App** — anytime from the system tray right-click menu; your choices are saved automatically in `config.ini`.
 
 Both Windows Copilot and the Windows Start Menu are suppressed when you press the key.
 
@@ -18,7 +18,7 @@ Both Windows Copilot and the Windows Start Menu are suppressed when you press th
 
 - **OS:** Windows 11 (64-bit) with a hardware Copilot key (or any keyboard emitting `Win + Shift + F23`)
 - **Runtime / Compiler:** .NET Framework 4.x (included with Windows; the setup script checks for `csc.exe` and offers to install the .NET Framework 4.8 Developer Pack if missing)
-- **App:** Antigravity desktop app (auto-detected at runtime — no manual path configuration required)
+- **App:** Antigravity desktop app (`Antigravity.exe`) and/or Antigravity CLI (`agy.exe`) — both auto-detected at runtime with no manual path configuration required
 
 ---
 
@@ -88,8 +88,8 @@ powershell -ExecutionPolicy Bypass -File .\Build-And-Install.ps1 -NoLaunch
 | `README.md` | Project documentation |
 
 ### Generated / System Files
-- **`CopilotToAntigravity.exe`** — Native Windows executable (~17 KB) compiled by `Build-And-Install.ps1` inside the project folder.
-- **`config.ini`** — Auto-created settings file storing your chosen focused action (`FocusedAction=MinimizeToTray` or `FocusedAction=Close`).
+- **`CopilotToAntigravity.exe`** — Native Windows executable compiled by `Build-And-Install.ps1` inside the project folder.
+- **`config.ini`** — Auto-created settings file storing your chosen target (`TargetMode=GUI`, `TargetMode=CLI`, or `TargetMode=Ask`) and focused action (`FocusedAction=MinimizeToTray` or `FocusedAction=Close`).
 - **Windows Startup Shortcut** — `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\CopilotToAntigravity.lnk` (created automatically unless `-NoStartup` is passed).
 
 > **Tip:** Press `Win + R`, type `shell:startup`, and press Enter to open your Windows Startup folder.
@@ -109,21 +109,35 @@ To check whether it is currently running:
 Get-Process -Name CopilotToAntigravity -ErrorAction SilentlyContinue
 ```
 
+### Choose Target (GUI vs. CLI vs. Ask Every Time)
+1. Click the **^** arrow near the Windows clock (bottom-right taskbar).
+2. Right-click the **Antigravity** tray icon (`Copilot -> Antigravity`).
+3. Choose one of:
+   - **Target: Antigravity GUI** *(default)* — Launches, focuses, hides, or closes `Antigravity.exe`.
+   - **Target: Antigravity CLI (agy)** — Launches, focuses, hides, or closes `agy.exe`.
+   - **Target: Ask Every Time (Popup)** — Opens a compact centered picker popup each time you press the Copilot key:
+     - Press **`1`** or **`G`** (or click) for **Antigravity GUI**
+     - Press **`2`** or **`C`** (or click) for **Antigravity CLI (agy)**
+     - Press **`Esc`** (or click outside, or press the Copilot key again) to cancel
+     - Optionally check **Remember choice** in the popup to save your selection as the default.
+
+You can also launch or focus either surface directly anytime from the tray menu (**Open / Show Antigravity GUI** / **Open / Show Antigravity CLI (agy)**).
+
 ### Choose Focused Action (Minimize to Tray vs. Close App)
 1. Click the **^** arrow near the Windows clock (bottom-right taskbar).
 2. Right-click the **Antigravity** tray icon (`Copilot -> Antigravity`).
 3. Choose either:
-   - **When Focused: Minimize to Tray (Hide)** *(default)* — Hides Antigravity from the taskbar and keeps it running silently behind the hidden tray icon until you press the Copilot key again (or double-click the tray icon).
-   - **When Focused: Close App** — Sends a clean close (`WM_CLOSE`) to the Antigravity window.
+   - **When Focused: Minimize to Tray (Hide)** *(default)* — Hides the active Antigravity GUI or CLI window from the taskbar and keeps it running silently behind the tray icon until you press the Copilot key again (or open it from the tray).
+   - **When Focused: Close App** — Sends a clean close (`WM_CLOSE`) to the focused window.
 
-Your selection is saved automatically in `config.ini` next to `CopilotToAntigravity.exe`.
+Your selections are saved automatically in `config.ini` next to `CopilotToAntigravity.exe`.
 
 ### Temporarily Pause Remapping
 1. Click the **^** arrow near the Windows clock (bottom-right taskbar).
 2. Right-click the **Antigravity** tray icon.
 3. Uncheck **Enabled** (tooltip changes to `Copilot -> Antigravity (Paused)`). Check it again to resume.
 
-> Double-clicking the tray icon opens, unhides, or focuses Antigravity directly.
+> Double-clicking the tray icon opens/focuses the selected target (or opens the quick picker popup when **Ask Every Time** is active).
 
 ### Stop Completely (Until Next Sign-In)
 - **System Tray (recommended):** Right-click the tray icon → click **Exit**.
@@ -169,23 +183,21 @@ Windows' built-in *Settings → Personalization → Text input → Customize Cop
    - **Suppresses Windows Copilot:** Returns `(IntPtr)1` on both `F23` key-down and key-up so Windows Shell never receives `Win + Shift + F23`.
    - **Debounces & Dispatches Async:** Enforces a 300 ms cooldown and posts `ToggleAntigravity()` to the UI thread via `Control.BeginInvoke` so the keyboard hook never blocks.
 
-### 3. Antigravity Path Auto-Detection
-Both `CopilotToAntigravity.exe` (at runtime) and `Build-And-Install.ps1` (at setup time) automatically locate `Antigravity.exe` without hardcoded user paths, checking in order:
-1. Standard user and system install folders (`%LOCALAPPDATA%\Programs\antigravity`, `%ProgramFiles%\antigravity`, `%ProgramFiles(x86)%\antigravity`)
-2. Currently running `Antigravity` process path (`MainModule.FileName`)
-3. Windows Registry `App Paths\Antigravity.exe` (`HKCU` and `HKLM`)
-4. Windows Registry `Uninstall` entries (`HKCU`, `HKLM`, `WOW6432Node`) matching `*Antigravity*` (`InstallLocation`, `DisplayIcon`, `UninstallString`)
-5. Directories in the `PATH` environment variable
+### 3. Antigravity GUI & CLI Path Auto-Detection
+Both `CopilotToAntigravity.exe` (at runtime) and `Build-And-Install.ps1` (at setup time) automatically locate `Antigravity.exe` (GUI) and `agy.exe` (CLI) without hardcoded user paths:
+- **GUI (`Antigravity.exe`):** Checks standard user/system install folders (`%LOCALAPPDATA%\Programs\antigravity`, `%ProgramFiles%\antigravity`, `%ProgramFiles(x86)%\antigravity`), running `Antigravity` processes, `App Paths\Antigravity.exe`, `Uninstall` registry entries, and `PATH`.
+- **CLI (`agy.exe`):** Checks standard CLI install folders (`%LOCALAPPDATA%\agy\bin`, `%LOCALAPPDATA%\Programs\agy\bin`, `%USERPROFILE%\.agy\bin`, etc.), running `agy` processes, `App Paths\agy.exe`, and `PATH`. When launched, `agy.exe` starts in your `%USERPROFILE%` directory.
 
-If Antigravity is moved or installed later, the helper re-runs auto-detection automatically the next time you press the Copilot key. If it still cannot be found, it shows a tray balloon notification instead of failing silently.
+If either executable is moved or installed later, the helper re-runs auto-detection automatically the next time you press the Copilot key. If it still cannot be found, it shows a tray balloon notification instead of failing silently.
 
 ### 4. Window Toggle, Hide-to-Tray & Close Logic
-1. **Antigravity is focused:** Resolves the foreground root window (`GetAncestor(..., GA_ROOT)`):
-   - **Minimize to Tray mode (`FocusedAction=MinimizeToTray`, default):** Records the window handle in `_hiddenWindows` and hides it via `ShowWindow(rootHwnd, SW_HIDE)`, removing Antigravity from the Windows taskbar and Alt+Tab while keeping it running instantly ready behind the hidden tray icon.
-   - **Close App mode (`FocusedAction=Close`):** Sends `WM_CLOSE` via `PostMessage(rootHwnd, WM_CLOSE, ...)` so Antigravity closes cleanly (preserving unsaved-file prompts).
-2. **Antigravity is hidden, minimized, or in the background:** Checks `_hiddenWindows` first (then `_lastToggledHwnd`, then `EnumWindows`), unhides via `ShowWindow(hWnd, SW_SHOW)` (and `SW_RESTORE` if minimized), and brings it to the foreground (`AllowSetForegroundWindow`, `AttachThreadInput`, `BringWindowToTop`, `SetForegroundWindow`).
-3. **Antigravity is not running:** Launches the auto-detected `Antigravity.exe`.
-4. **Safety on Exit:** Clicking **Exit** in the tray menu automatically unhides any hidden Antigravity windows (`SW_SHOW`) before exiting so Antigravity is never left stranded invisible.
+GUI and CLI windows are tracked independently so both can run and be hidden/restored without interfering:
+1. **Target is focused:** Resolves the foreground root window (`GetAncestor(..., GA_ROOT)`):
+   - **Minimize to Tray mode (`FocusedAction=MinimizeToTray`, default):** Records the window handle in the corresponding hidden list and hides it via `ShowWindow(rootHwnd, SW_HIDE)`, removing it from the Windows taskbar and Alt+Tab while keeping it running in the background.
+   - **Close App mode (`FocusedAction=Close`):** Sends `WM_CLOSE` via `PostMessage(rootHwnd, WM_CLOSE, ...)` so the window closes cleanly.
+2. **Target is hidden, minimized, or in the background:** Checks the hidden window list first (then last toggled window, then `EnumWindows`), unhides via `ShowWindow(hWnd, SW_SHOW)` (and `SW_RESTORE` if minimized), and brings it to the foreground (`AllowSetForegroundWindow`, `AttachThreadInput`, `BringWindowToTop`, `SetForegroundWindow`).
+3. **Target is not running:** Launches the auto-detected `Antigravity.exe` or `agy.exe`.
+4. **Safety on Exit:** Clicking **Exit** in the tray menu automatically unhides any hidden GUI or CLI windows (`SW_SHOW`) before exiting so no window is ever left stranded invisible.
 
 ### 5. C# Compiler Detection (`Build-And-Install.ps1`)
 When you run `Build-And-Install.bat` (or `Build-And-Install.ps1`), it checks for the built-in .NET Framework 4.x C# compiler (`%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, 32-bit fallback, or `csc.exe` in `PATH`):

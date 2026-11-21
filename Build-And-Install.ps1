@@ -128,6 +128,58 @@ function Find-AntigravityExe {
     return $null
 }
 
+function Find-AntigravityCliExe {
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "agy\bin\agy.exe"),
+        (Join-Path $env:LOCALAPPDATA "Programs\agy\bin\agy.exe"),
+        (Join-Path $env:LOCALAPPDATA "Programs\agy\agy.exe"),
+        (Join-Path $env:LOCALAPPDATA "Programs\antigravity\bin\agy.exe"),
+        (Join-Path $env:LOCALAPPDATA "Programs\Antigravity\bin\agy.exe"),
+        (Join-Path $env:USERPROFILE ".agy\bin\agy.exe"),
+        (Join-Path $env:ProgramFiles "agy\bin\agy.exe"),
+        (Join-Path $env:ProgramFiles "agy\agy.exe")
+    )
+    if (${env:ProgramFiles(x86)}) {
+        $candidates += (Join-Path ${env:ProgramFiles(x86)} "agy\bin\agy.exe")
+    }
+
+    foreach ($path in $candidates) {
+        if ($path -and (Test-Path $path)) {
+            return $path
+        }
+    }
+
+    $proc = Get-Process -Name "agy" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($proc) {
+        try {
+            if ($proc.Path -and (Test-Path $proc.Path)) {
+                return $proc.Path
+            }
+        } catch {}
+    }
+
+    $appPaths = @(
+        "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\agy.exe",
+        "HKLM:\Software\Microsoft\Windows\CurrentVersion\App Paths\agy.exe"
+    )
+    foreach ($key in $appPaths) {
+        try {
+            $val = (Get-ItemProperty -Path $key -ErrorAction SilentlyContinue).'(default)'
+            if ($val) {
+                $clean = $val.Trim().Trim('"')
+                if (Test-Path $clean) { return $clean }
+            }
+        } catch {}
+    }
+
+    $inPath = Get-Command "agy.exe" -ErrorAction SilentlyContinue
+    if ($inPath -and (Test-Path $inPath.Source)) {
+        return $inPath.Source
+    }
+
+    return $null
+}
+
 Write-Host "=== Antigravity Copilot Key Shortcut - Setup ===" -ForegroundColor Cyan
 
 if (-not (Test-Path $SourceFile)) {
@@ -135,13 +187,21 @@ if (-not (Test-Path $SourceFile)) {
     exit 1
 }
 
-# 1. Auto-detect Antigravity installation
+# 1. Auto-detect Antigravity GUI and CLI installations
 $antigravityExe = Find-AntigravityExe
 if ($antigravityExe) {
-    Write-Host "[OK] Antigravity detected at: $antigravityExe" -ForegroundColor Green
+    Write-Host "[OK] Antigravity GUI detected at: $antigravityExe" -ForegroundColor Green
 } else {
-    Write-Host "[WARN] Antigravity.exe was not found on this PC yet." -ForegroundColor Yellow
-    Write-Host "       The helper will still compile and auto-detect Antigravity once installed." -ForegroundColor Yellow
+    Write-Host "[WARN] Antigravity.exe (GUI) was not found on this PC yet." -ForegroundColor Yellow
+    Write-Host "       The helper will still compile and auto-detect Antigravity GUI once installed." -ForegroundColor Yellow
+}
+
+$antigravityCliExe = Find-AntigravityCliExe
+if ($antigravityCliExe) {
+    Write-Host "[OK] Antigravity CLI (agy) detected at: $antigravityCliExe" -ForegroundColor Green
+} else {
+    Write-Host "[WARN] agy.exe (CLI) was not found on this PC yet." -ForegroundColor Yellow
+    Write-Host "       The helper will still compile and auto-detect Antigravity CLI once installed." -ForegroundColor Yellow
 }
 
 # 2. Detect C# compiler state
