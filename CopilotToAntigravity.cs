@@ -10,6 +10,12 @@ using Microsoft.Win32;
 
 namespace CopilotToAntigravity
 {
+    internal enum FocusedActionMode
+    {
+        MinimizeToTray = 0,
+        CloseApp = 1
+    }
+
     internal static class Program
     {
         private const string MutexName = "Local\\CopilotToAntigravity_SingleInstance_Mutex";
@@ -39,6 +45,7 @@ namespace CopilotToAntigravity
         private const int WM_KEYUP = 0x0101;
         private const int WM_SYSKEYDOWN = 0x0104;
         private const int WM_SYSKEYUP = 0x0105;
+        private const uint WM_CLOSE = 0x0010;
 
         private const uint LLKHF_INJECTED = 0x10;
 
@@ -52,21 +59,26 @@ namespace CopilotToAntigravity
         private const uint INPUT_KEYBOARD = 1;
         private const uint KEYEVENTF_KEYUP = 0x0002;
 
-        private const int SW_RESTORE = 9;
+        private const int SW_HIDE = 0;
         private const int SW_SHOW = 5;
-        private const int SW_MINIMIZE = 6;
+        private const int SW_RESTORE = 9;
         private const uint GA_ROOT = 2;
 
+        private readonly string _configPath;
         private string _antigravityPath;
         private readonly Control _invoker;
         private readonly NotifyIcon _trayIcon;
         private readonly ToolStripMenuItem _enabledMenuItem;
+        private readonly ToolStripMenuItem _modeMinimizeMenuItem;
+        private readonly ToolStripMenuItem _modeCloseMenuItem;
         private readonly LowLevelKeyboardProc _hookProc;
         private readonly Stopwatch _triggerTimer;
+        private readonly List<IntPtr> _hiddenWindows = new List<IntPtr>();
 
         private IntPtr _hookId = IntPtr.Zero;
         private IntPtr _lastToggledHwnd = IntPtr.Zero;
         private bool _enabled = true;
+        private FocusedActionMode _focusedAction = FocusedActionMode.MinimizeToTray;
         private bool _lWinDown;
         private bool _rWinDown;
         private bool _lShiftDown;
@@ -76,6 +88,8 @@ namespace CopilotToAntigravity
 
         public CopilotTrayContext()
         {
+            _configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.ini");
+            _focusedAction = LoadFocusedAction(_configPath);
             _antigravityPath = ResolveAntigravityPath();
             _triggerTimer = Stopwatch.StartNew();
 
@@ -88,21 +102,111 @@ namespace CopilotToAntigravity
             _enabledMenuItem.CheckOnClick = true;
             _enabledMenuItem.CheckedChanged += OnEnabledChanged;
 
+            _modeMinimizeMenuItem = new ToolStripMenuItem("When Focused: Minimize to Tray (Hide)");
+            _modeMinimizeMenuItem.Click += OnSelectMinimizeMode;
+
+            _modeCloseMenuItem = new ToolStripMenuItem("When Focused: Close App");
+            _modeCloseMenuItem.Click += OnSelectCloseMode;
+
+            UpdateModeMenuChecks();
+
             ContextMenuStrip menu = new ContextMenuStrip();
-            menu.Items.Add("Open Antigravity", null, OnOpenClicked);
+            menu.Items.Add("Open / Show Antigravity", null, OnOpenClicked);
             menu.Items.Add(_enabledMenuItem);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(_modeMinimizeMenuItem);
+            menu.Items.Add(_modeCloseMenuItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Exit", null, OnExitClicked);
 
             _trayIcon = new NotifyIcon();
-            _trayIcon.Text = "Copilot Key -> Antigravity";
             _trayIcon.Icon = LoadTrayIcon(_antigravityPath);
             _trayIcon.ContextMenuStrip = menu;
             _trayIcon.DoubleClick += OnOpenClicked;
+            UpdateTrayTooltip();
             _trayIcon.Visible = true;
 
             _hookProc = HookCallback;
             _hookId = InstallHook(_hookProc);
+        }
+
+        private static FocusedActionMode LoadFocusedAction(string configPath)
+        {
+            try
+            {
+                if (File.Exists(configPath))
+                {
+                    string[] lines = File.ReadAllLines(configPath);
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        string line = lines[i].Trim();
+                        if (line.Length == 0 || line.StartsWith("#") || line.StartsWith(";"))
+                        {
+                            continue;
+                        }
+
+                        int eq = line.IndexOf('=');
+                        if (eq <= 0) continue;
+
+                        string key = line.Substring(0, eq).Trim();
+                        string val = line.Substring(eq + 1).Trim();
+                        if (key.Equals("FocusedAction", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (val.Equals("Close", StringComparison.OrdinalIgnoreCase) ||
+                                val.Equals("CloseApp", StringComparison.OrdinalIgnoreCase))
+                            {
+                                return FocusedActionMode.CloseApp;
+                            }
+                            return FocusedActionMode.MinimizeToTray;
+                        }
+                    }
+                }
+                else
+                {
+                    SaveFocusedAction(configPath, FocusedActionMode.MinimizeToTray);
+                }
+            }
+            catch
+            {
+                // Fall back to default
+            }
+
+            return FocusedActionMode.MinimizeToTray;
+        }
+
+        private static void SaveFocusedAction(string configPath, FocusedActionMode mode)
+        {
+            try
+            {
+                string value = (mode == FocusedActionMode.CloseApp) ? "Close" : "MinimizeToTray";
+                string content =
+                    "# Action when pressing the Copilot key while Antigravity is already focused" + Environment.NewLine +
+                    "# Options: MinimizeToTray | Close" + Environment.NewLine +
+                    "FocusedAction=" + value + Environment.NewLine;
+                File.WriteAllText(configPath, content);
+            }
+            catch
+            {
+                // Ignore config write failures (e.g. read-only directory)
+            }
+        }
+
+        private void UpdateModeMenuChecks()
+        {
+            _modeMinimizeMenuItem.Checked = (_focusedAction == FocusedActionMode.MinimizeToTray);
+            _modeCloseMenuItem.Checked = (_focusedAction == FocusedActionMode.CloseApp);
+        }
+
+        private void UpdateTrayTooltip()
+        {
+            if (!_enabled)
+            {
+                _trayIcon.Text = "Copilot -> Antigravity (Paused)";
+                return;
+            }
+
+            string modeText = (_focusedAction == FocusedActionMode.CloseApp) ? "Close" : "Hide to Tray";
+            _trayIcon.Text = "Copilot -> Antigravity (" + modeText + ")";
         }
 
         private static string ResolveAntigravityPath()
@@ -445,6 +549,8 @@ namespace CopilotToAntigravity
             try
             {
                 HashSet<uint> targetPids = GetAntigravityPids();
+                PruneHiddenWindows(targetPids);
+
                 if (targetPids.Count > 0)
                 {
                     IntPtr fgHwnd = GetForegroundWindow();
@@ -460,10 +566,21 @@ namespace CopilotToAntigravity
                                 rootHwnd = fgHwnd;
                             }
 
-                            if (!IsIconic(rootHwnd))
+                            if (IsWindowVisible(rootHwnd) && !IsIconic(rootHwnd) && !_hiddenWindows.Contains(rootHwnd))
                             {
-                                _lastToggledHwnd = rootHwnd;
-                                ShowWindow(rootHwnd, SW_MINIMIZE);
+                                if (_focusedAction == FocusedActionMode.CloseApp)
+                                {
+                                    _hiddenWindows.Remove(rootHwnd);
+                                    if (_lastToggledHwnd == rootHwnd)
+                                    {
+                                        _lastToggledHwnd = IntPtr.Zero;
+                                    }
+                                    PostMessage(rootHwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                                }
+                                else
+                                {
+                                    HideWindowToTray(rootHwnd);
+                                }
                                 return;
                             }
                         }
@@ -473,6 +590,7 @@ namespace CopilotToAntigravity
                     if (existingHwnd != IntPtr.Zero)
                     {
                         _lastToggledHwnd = existingHwnd;
+                        _hiddenWindows.Remove(existingHwnd);
                         if (FocusWindow(existingHwnd))
                         {
                             return;
@@ -493,10 +611,13 @@ namespace CopilotToAntigravity
             try
             {
                 HashSet<uint> targetPids = GetAntigravityPids();
+                PruneHiddenWindows(targetPids);
+
                 IntPtr existingHwnd = FindAntigravityWindow(targetPids);
                 if (existingHwnd != IntPtr.Zero)
                 {
                     _lastToggledHwnd = existingHwnd;
+                    _hiddenWindows.Remove(existingHwnd);
                     if (FocusWindow(existingHwnd))
                     {
                         return;
@@ -509,6 +630,49 @@ namespace CopilotToAntigravity
             {
                 // Ignore launch errors to keep the background hook alive
             }
+        }
+
+        private void HideWindowToTray(IntPtr rootHwnd)
+        {
+            _lastToggledHwnd = rootHwnd;
+            if (!_hiddenWindows.Contains(rootHwnd))
+            {
+                _hiddenWindows.Add(rootHwnd);
+            }
+            ShowWindow(rootHwnd, SW_HIDE);
+        }
+
+        private void PruneHiddenWindows(HashSet<uint> activePids)
+        {
+            for (int i = _hiddenWindows.Count - 1; i >= 0; i--)
+            {
+                IntPtr h = _hiddenWindows[i];
+                if (h == IntPtr.Zero || !IsWindow(h))
+                {
+                    _hiddenWindows.RemoveAt(i);
+                    continue;
+                }
+
+                uint pid;
+                GetWindowThreadProcessId(h, out pid);
+                if (!activePids.Contains(pid))
+                {
+                    _hiddenWindows.RemoveAt(i);
+                }
+            }
+        }
+
+        private void RestoreAllHiddenWindows()
+        {
+            for (int i = 0; i < _hiddenWindows.Count; i++)
+            {
+                IntPtr h = _hiddenWindows[i];
+                if (h != IntPtr.Zero && IsWindow(h))
+                {
+                    ShowWindow(h, SW_SHOW);
+                }
+            }
+            _hiddenWindows.Clear();
         }
 
         private void LaunchAntigravity()
@@ -569,6 +733,22 @@ namespace CopilotToAntigravity
                 return IntPtr.Zero;
             }
 
+            // 1. Prefer the most recently hidden window (if any)
+            for (int i = _hiddenWindows.Count - 1; i >= 0; i--)
+            {
+                IntPtr h = _hiddenWindows[i];
+                if (h != IntPtr.Zero && IsWindow(h))
+                {
+                    uint pid;
+                    GetWindowThreadProcessId(h, out pid);
+                    if (targetPids.Contains(pid))
+                    {
+                        return h;
+                    }
+                }
+            }
+
+            // 2. Prefer the last toggled visible window
             if (_lastToggledHwnd != IntPtr.Zero && IsWindow(_lastToggledHwnd) && IsWindowVisible(_lastToggledHwnd))
             {
                 uint lastPid;
@@ -579,6 +759,7 @@ namespace CopilotToAntigravity
                 }
             }
 
+            // 3. Otherwise find any visible Antigravity top-level window
             IntPtr found = IntPtr.Zero;
             EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
             {
@@ -602,21 +783,14 @@ namespace CopilotToAntigravity
 
         private static bool FocusWindow(IntPtr targetHwnd)
         {
+            // SW_SHOW unhides a hidden window while preserving maximized/normal state
+            ShowWindow(targetHwnd, SW_SHOW);
             if (IsIconic(targetHwnd))
             {
                 ShowWindow(targetHwnd, SW_RESTORE);
             }
-            else
-            {
-                ShowWindow(targetHwnd, SW_SHOW);
-            }
 
             IntPtr fgHwnd = GetForegroundWindow();
-            if (fgHwnd == targetHwnd)
-            {
-                return true;
-            }
-
             uint fgPid;
             uint targetPid;
             uint fgThread = fgHwnd != IntPtr.Zero ? GetWindowThreadProcessId(fgHwnd, out fgPid) : 0;
@@ -640,6 +814,7 @@ namespace CopilotToAntigravity
 
                 BringWindowToTop(targetHwnd);
                 SetForegroundWindow(targetHwnd);
+                SetActiveWindow(targetHwnd);
             }
             finally
             {
@@ -653,16 +828,30 @@ namespace CopilotToAntigravity
                 }
             }
 
-            return GetForegroundWindow() == targetHwnd;
+            return GetForegroundWindow() == targetHwnd || IsWindowVisible(targetHwnd);
         }
 
         private void OnEnabledChanged(object sender, EventArgs e)
         {
             _enabled = _enabledMenuItem.Checked;
             _f23Down = false;
-            _trayIcon.Text = _enabled
-                ? "Copilot Key -> Antigravity"
-                : "Copilot Key -> Antigravity (Paused)";
+            UpdateTrayTooltip();
+        }
+
+        private void OnSelectMinimizeMode(object sender, EventArgs e)
+        {
+            _focusedAction = FocusedActionMode.MinimizeToTray;
+            SaveFocusedAction(_configPath, _focusedAction);
+            UpdateModeMenuChecks();
+            UpdateTrayTooltip();
+        }
+
+        private void OnSelectCloseMode(object sender, EventArgs e)
+        {
+            _focusedAction = FocusedActionMode.CloseApp;
+            SaveFocusedAction(_configPath, _focusedAction);
+            UpdateModeMenuChecks();
+            UpdateTrayTooltip();
         }
 
         private void OnOpenClicked(object sender, EventArgs e)
@@ -677,6 +866,9 @@ namespace CopilotToAntigravity
 
         protected override void ExitThreadCore()
         {
+            // Safety: restore any Antigravity window we hid so it is never stranded invisible
+            RestoreAllHiddenWindows();
+
             if (_hookId != IntPtr.Zero)
             {
                 UnhookWindowsHookEx(_hookId);
@@ -802,12 +994,19 @@ namespace CopilotToAntigravity
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetActiveWindow(IntPtr hWnd);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
